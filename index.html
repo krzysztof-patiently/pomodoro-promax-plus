@@ -186,7 +186,7 @@
   <div class="durations">
     <label>focus <input id="focusMin" type="number" min="1" step="1" value="15"> </label>
     <label>relax <input id="relaxMin" type="number" min="1" step="1" value="5"> </label>
-    <label>cycles <input id="cycles" type="number" min="1" step="1" placeholder="∞" title="focus sessions before FINISHED; empty = keep going"> </label>
+    <label>cycles <input id="cyclesInput" type="number" min="1" step="1" placeholder="∞" title="focus sessions before FINISHED; empty = keep going"> </label>
   </div>
 
   <div class="controls">
@@ -346,7 +346,7 @@
   // ---------- DOM ----------
   const $ = (id) => document.getElementById(id);
   const clockEl = $('clock'), phaseEl = $('phase'), cyclesEl = $('cycles');
-  const focusMinEl = $('focusMin'), relaxMinEl = $('relaxMin'), cyclesInputEl = $('cycles');
+  const focusMinEl = $('focusMin'), relaxMinEl = $('relaxMin'), cyclesInputEl = $('cyclesInput');
   const startBtn = $('startBtn'), resetBtn = $('resetBtn');
   const gifLayer = $('gifs');
   const settingsEl = $('settings'), scrim = $('scrim');
@@ -493,7 +493,8 @@
       settings.relaxMin = minutesOf('relax');
       settings.cycles = cyclesTarget();
       saveSettings();
-      if (!running && endAt === null) { remainingMs = minutesOf(phase) * 60_000; render(); }
+      if (!running && endAt === null) remainingMs = minutesOf(phase) * 60_000;
+      render();   // label shows the cycle count straight away
     });
   }
 
