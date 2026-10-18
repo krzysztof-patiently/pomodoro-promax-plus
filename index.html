@@ -87,6 +87,8 @@
     letter-spacing: -.02em;
   }
   #cycles { color: var(--muted); font-size: .8rem; min-height: 1.2em; }
+  #clock.finished { font-size: clamp(2.6rem, 9vw, 5.5rem); letter-spacing: .25em; font-weight: 300; padding: .35em 0; }
+  .durations input::placeholder { color: var(--muted); }
 
   .durations {
     display: flex; gap: 1.5rem; justify-content: center;
@@ -184,6 +186,7 @@
   <div class="durations">
     <label>focus <input id="focusMin" type="number" min="1" step="1" value="15"> </label>
     <label>relax <input id="relaxMin" type="number" min="1" step="1" value="5"> </label>
+    <label>cycles <input id="cycles" type="number" min="1" step="1" placeholder="∞" title="focus sessions before FINISHED; empty = keep going"> </label>
   </div>
 
   <div class="controls">
@@ -253,6 +256,7 @@
   const DEFAULTS = {
     focusMin: 15,
     relaxMin: 5,
+    cycles: null,          // focus sessions before FINISHED; null = indefinite
     // sounds played when a period ends (from myinstants.com); empty = built-in soft bell
     focusChimeUrl: 'https://www.myinstants.com/media/sounds/yippie_2IJl9cR.mp3',   // "yippie" when focus ends
     relaxChimeUrl: 'https://www.myinstants.com/media/sounds/faaah.mp3',           // "faaah" when relax ends
@@ -342,13 +346,14 @@
   // ---------- DOM ----------
   const $ = (id) => document.getElementById(id);
   const clockEl = $('clock'), phaseEl = $('phase'), cyclesEl = $('cycles');
-  const focusMinEl = $('focusMin'), relaxMinEl = $('relaxMin');
+  const focusMinEl = $('focusMin'), relaxMinEl = $('relaxMin'), cyclesInputEl = $('cycles');
   const startBtn = $('startBtn'), resetBtn = $('resetBtn');
   const gifLayer = $('gifs');
   const settingsEl = $('settings'), scrim = $('scrim');
 
   focusMinEl.value = settings.focusMin;
   relaxMinEl.value = settings.relaxMin;
+  cyclesInputEl.value = settings.cycles ?? '';
   $('focusChimeUrl').value = settings.focusChimeUrl;
   $('relaxChimeUrl').value = settings.relaxChimeUrl;
 
@@ -358,6 +363,7 @@
   let endAt = null;             // timestamp (ms) when current period ends
   let remainingMs = minutesOf('focus') * 60_000;
   let completedFocus = 0;
+  let finished = false;         // reached the configured number of cycles
   let tickHandle = null;
   const elapsed = { focus: 0, relax: 0 };   // ms actually spent running in each phase
   let lastTick = null;                      // timestamp of the last accounting tick
@@ -369,6 +375,10 @@
     lastTick = now;
   }
   const mins = (ms) => Math.round(ms / 60_000);
+  function cyclesTarget() {
+    const v = parseInt(cyclesInputEl.value, 10);
+    return Number.isFinite(v) && v > 0 ? v : null;   // null = indefinite
+  }
 
   function minutesOf(p) {
     const el = p === 'focus' ? focusMinEl : relaxMinEl;
@@ -383,12 +393,16 @@
   }
 
   function render() {
-    const txt = fmt(running ? endAt - Date.now() : remainingMs);
+    const target = cyclesTarget();
+    const txt = finished ? 'FINISHED' : fmt(running ? endAt - Date.now() : remainingMs);
     clockEl.textContent = txt;
-    document.title = running ? `${txt} · ${phase}` : 'Pomodoro';
-    phaseEl.textContent = phase;
+    clockEl.classList.toggle('finished', finished);
+    document.title = finished ? 'FINISHED · Pomodoro' : running ? `${txt} · ${phase}` : 'Pomodoro';
+    const cycleNo = Math.min(completedFocus + (phase === 'focus' && !finished ? 1 : 0), target || Infinity);
+    phaseEl.textContent = finished ? 'all done · relax' : target ? `${phase} · cycle ${cycleNo} of ${target}` : phase;
     document.body.dataset.phase = phase;
-    startBtn.textContent = running ? 'Pause' : (endAt === null && remainingMs === minutesOf(phase) * 60_000 ? 'Start' : 'Resume');
+    startBtn.textContent = finished ? 'Done' : running ? 'Pause' : (endAt === null && remainingMs === minutesOf(phase) * 60_000 ? 'Start' : 'Resume');
+    startBtn.disabled = finished;
     const total = elapsed.focus + elapsed.relax;
     cyclesEl.textContent = (completedFocus || total > 0)
       ? `${completedFocus} focus ${completedFocus === 1 ? 'session' : 'sessions'} done ` +
@@ -404,7 +418,7 @@
   }
 
   function start() {
-    if (running) return;
+    if (running || finished) return;
     ensureAudio();
     running = true;
     endAt = Date.now() + remainingMs;
@@ -431,6 +445,7 @@
     endAt = null;
     remainingMs = minutesOf('focus') * 60_000;
     completedFocus = 0;
+    finished = false;
     elapsed.focus = 0; elapsed.relax = 0; lastTick = null;
     stopGifs(true);
     render();
@@ -439,10 +454,23 @@
   function endPeriod() {
     chime(phase);                       // sound for the period that just ended
     if (phase === 'focus') completedFocus++;
+    const target = cyclesTarget();
+    if (phase === 'focus' && target && completedFocus >= target) { finish(); return; }
     phase = phase === 'focus' ? 'relax' : 'focus';
     remainingMs = minutesOf(phase) * 60_000;
     endAt = Date.now() + remainingMs;
     lastTick = Date.now();
+    stopGifs(true);
+    startGifs();
+    render();
+  }
+
+  // All cycles done: no more timer, relax colours and gifs for as long as the page stays open.
+  function finish() {
+    running = false; finished = true;
+    clearInterval(tickHandle); tickHandle = null;
+    phase = 'relax';
+    endAt = null; remainingMs = 0;
     stopGifs(true);
     startGifs();
     render();
@@ -459,10 +487,11 @@
 
   // Durations are saved on every keystroke (so a refresh never loses them);
   // changing one while idle re-arms the current period.
-  for (const el of [focusMinEl, relaxMinEl]) {
+  for (const el of [focusMinEl, relaxMinEl, cyclesInputEl]) {
     el.addEventListener('input', () => {
       settings.focusMin = minutesOf('focus');
       settings.relaxMin = minutesOf('relax');
+      settings.cycles = cyclesTarget();
       saveSettings();
       if (!running && endAt === null) { remainingMs = minutesOf(phase) * 60_000; render(); }
     });
@@ -691,6 +720,7 @@
     saveSettings();
     focusMinEl.value = settings.focusMin;
     relaxMinEl.value = settings.relaxMin;
+    cyclesInputEl.value = '';
     $('focusChimeUrl').value = settings.focusChimeUrl;
     $('relaxChimeUrl').value = settings.relaxChimeUrl;
     renderLists();
