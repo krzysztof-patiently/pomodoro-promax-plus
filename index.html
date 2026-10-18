@@ -517,7 +517,22 @@
     if (nextMax < nextMin) nextMax = nextMin;
     return { lifetime: lifetime * 1000, nextMin: nextMin * 1000, nextMax: nextMax * 1000 };
   }
-  let spawnHandle = null, lastGif = null, nextSide = 'left';
+  let spawnHandle = null, nextSide = 'left';
+  const recentGifs = [];   // most recently shown last
+
+  // Random clip from `list`, avoiding the ones shown most recently (the last two when at least
+  // three are configured, the last one when two are) and, when possible, ones still on screen.
+  function pickGif(list) {
+    const avoid = new Set(recentGifs.slice(-Math.min(2, list.length - 1)));
+    const onScreen = new Set([...gifLayer.children].map((el) => el.dataset.url));
+    let pool = list.filter((u) => !avoid.has(u) && !onScreen.has(u));
+    if (!pool.length) pool = list.filter((u) => !avoid.has(u));
+    if (!pool.length) pool = list;
+    const url = pool[Math.floor(Math.random() * pool.length)];
+    recentGifs.push(url);
+    if (recentGifs.length > 10) recentGifs.shift();
+    return url;
+  }
 
   function currentGifs() { return settings[phase + 'Gifs'] || []; }
 
@@ -554,15 +569,14 @@
     scheduleNext();
     const list = currentGifs();
     if (!list.length || gifLayer.children.length >= MAX_VISIBLE) return;
-    let url = list[Math.floor(Math.random() * list.length)];
-    if (list.length > 1 && url === lastGif) url = list[(list.indexOf(url) + 1) % list.length];
-    lastGif = url;
+    const url = pickGif(list);
 
     const size = Math.round(150 + Math.random() * 130);
     const spot = findSpot(size, nextSide);
     if (!spot) return;                       // no room that keeps the timer readable; try again next tick
     nextSide = nextSide === 'left' ? 'right' : 'left';   // alternate sides of the screen
     const img = mediaEl(url);
+    img.dataset.url = url;
     img.style.width = size + 'px';
     img.style.maxHeight = size + 'px';
     img.style.left = spot.x + 'px';
