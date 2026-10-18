@@ -5,20 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pomodoro</title>
 <style>
-  /* Palette: dark plum, pale yellow, teal, steel blue, light blue */
+  /* Palette: dark plum, pale yellow, mint (from the teal), light blue */
   :root {
     --plum: #532b3b;
     --cream: #ede8b0;
     --teal: #008080;
-    --steel: #3e88ae;
+    --mint: #3fbfae;                    /* lighter take on the palette's teal */
+    --mint-text: #8fe0d4;
     --sky: #b0c4de;
 
     --bg: var(--plum);
     --fg: var(--cream);
     --muted: rgba(176,196,222,.7);      /* sky at 70% */
-    --accent: var(--steel);
-    --accent-text: #6fb0d2;             /* lighter steel: readable as small text on plum */
-    --on-accent: var(--cream);
+    --accent: var(--mint);
+    --accent-text: var(--mint-text);    /* readable as small text on plum */
+    --on-accent: var(--plum);
     --panel: #3f2030;
     --border: rgba(176,196,222,.22);
     --hover: var(--teal);
@@ -40,7 +41,7 @@
 
   /* ---- GIF layer ---- */
   #gifs { position: fixed; inset: 0; pointer-events: none; z-index: 3; }
-  #gifs img {
+  #gifs img, #gifs video {
     position: absolute;
     border-radius: 12px;
     box-shadow: 0 10px 30px rgba(30,10,20,.5);
@@ -48,7 +49,7 @@
     transform: scale(.92) rotate(var(--tilt, 0deg));
     animation: gif-in .5s ease-out forwards;
   }
-  #gifs img.leaving { animation: gif-out .5s ease-in forwards; }
+  #gifs .leaving { animation: gif-out .5s ease-in forwards; }
   @keyframes gif-in  { to { opacity: 1; transform: scale(1) rotate(var(--tilt, 0deg)); } }
   @keyframes gif-out { from { opacity: 1; } to { opacity: 0; transform: scale(.9) rotate(var(--tilt, 0deg)); } }
 
@@ -129,7 +130,7 @@
     display: grid; grid-template-columns: 44px 1fr auto; gap: .6rem; align-items: center;
     background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: .35rem .5rem;
   }
-  .gif-list img { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; background: var(--panel); }
+  .gif-list img, .gif-list video { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; background: var(--panel); }
   .gif-list .url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: .75rem; }
   .gif-list .remove { padding: .2rem .55rem; border-radius: 6px; color: var(--muted); }
   .gif-list .remove:hover { color: var(--danger); border-color: var(--danger); }
@@ -253,13 +254,35 @@
       'https://media4.giphy.com/media/v1.Y2lkPTZjMDliOTUyanNubDY5ZmNyNnI4aWJwdnBncDN5ZDZ2cTFsam1vb2VtaTQ3c2gydiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/qZgHBlenHa1zKqy6Zn/200w.gif',
       'https://media4.giphy.com/media/v1.Y2lkPTZjMDliOTUyanNubDY5ZmNyNnI4aWJwdnBncDN5ZDZ2cTFsam1vb2VtaTQ3c2gydiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/C7grnU4M3o5on6ALso/200w.gif',
       'https://media.tenor.com/1s_ji1b00LcAAAAM/cat-stare.gif',
+      'https://media1.tenor.com/m/oTeBa4EVepMAAAAC/business-cat-working.gif',
+      'https://media1.tenor.com/m/OkaHqO4FNS4AAAAd/focus-cat.gif',
+      'https://media.tenor.com/Tf5rk-LhRdYAAAP1/cat.mp4',
+      'https://media1.tenor.com/m/JStlMJSQFkAAAAAC/cat-reading.gif',
     ],
     relaxGifs: [
       'https://media.tenor.com/YfUCc6gacQMAAAAM/cats-dancing-brazil-dance.gif',
       'https://media.tenor.com/aGj-frNYMFEAAAAM/cat-cat-dance.gif',
       'https://media.tenor.com/sRrwlJNA744AAAAM/kitten-kitten-dance.gif',
-      'https://media.tenor.com/8dTA0WCA99AAAAAM/cats-cat.gif',
+      'https://media1.tenor.com/m/8dTA0WCA99AAAAAd/cats-cat.gif',
+      'https://media.tenor.com/62-aXIQUtvQAAAP1/amazing-adorable.mp4',
+      'https://media1.tenor.com/m/lfDATg4Bhc0AAAAC/happy-cat.gif',
+      'https://media1.tenor.com/m/WsWej1C3ePYAAAAC/yippee-cat-kitty.gif',
+      'https://media1.tenor.com/m/QRbEFR580y4AAAAd/yippee-veni.gif',
+      'https://media.tenor.com/GnT6WEh2xYkAAAP1/cat-showercap-slyonicz.mp4',
+      'https://media.tenor.com/qbfgj0iskysAAAP1/pufferfish-cat.mp4',
+      'https://media1.tenor.com/m/D3_iw2lh7h8AAAAd/dancing-cats.gif',
+      'https://media1.tenor.com/m/lQ9SU3vt_f4AAAAd/cool-fun.gif',
     ],
+    gifDefaultsVersion: 2,
+  };
+  // Defaults added in later versions, appended to saved lists on upgrade (see loadSettings).
+  const GIF_ADDITIONS = {
+    2: {
+      focusGifs: DEFAULTS.focusGifs.slice(4),
+      relaxGifs: DEFAULTS.relaxGifs.slice(3),
+      // same clip, higher-resolution file
+      replace: { 'https://media.tenor.com/8dTA0WCA99AAAAAM/cats-cat.gif': 'https://media1.tenor.com/m/8dTA0WCA99AAAAAd/cats-cat.gif' },
+    },
   };
   const STORAGE_KEY = 'pomodoro.settings.v1';
 
@@ -268,6 +291,15 @@
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
       if (!saved) return structuredClone(DEFAULTS);
       const merged = { ...structuredClone(DEFAULTS), ...saved };
+      // Bring in gifs added to the defaults since this browser last saved its settings.
+      for (let v = (saved.gifDefaultsVersion || 1) + 1; v <= DEFAULTS.gifDefaultsVersion; v++) {
+        const add = GIF_ADDITIONS[v]; if (!add) continue;
+        for (const kind of ['focusGifs', 'relaxGifs']) {
+          merged[kind] = (merged[kind] || []).map((u) => add.replace?.[u] || u);
+          for (const u of add[kind] || []) if (!merged[kind].includes(u)) merged[kind].push(u);
+        }
+      }
+      merged.gifDefaultsVersion = DEFAULTS.gifDefaultsVersion;
       for (const k of ['focusCadence', 'relaxCadence']) merged[k] = { ...DEFAULTS[k], ...(saved[k] || {}) };
       // Older versions stored a single chimeUrl: carry a custom choice over to both phases,
       // but an old default (or an empty value the user never set) gets the new per-phase defaults.
@@ -479,11 +511,21 @@
 
   function currentGifs() { return settings[phase + 'Gifs'] || []; }
 
+  const isVideo = (url) => /\.(mp4|webm|mov)(\?|#|$)/i.test(url);
+  // An element that shows the clip at `url`: an <img> for gifs, a silent looping <video> otherwise.
+  function mediaEl(url) {
+    if (!isVideo(url)) { const img = document.createElement('img'); img.src = url; img.alt = ''; return img; }
+    const v = document.createElement('video');
+    v.src = url; v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true;
+    v.setAttribute('muted', ''); v.setAttribute('playsinline', '');
+    return v;
+  }
+
   function startGifs() {
     stopGifs();
     const list = currentGifs();
     if (!list.length) return;
-    list.forEach((u) => { const im = new Image(); im.src = u; });   // warm the cache
+    list.filter((u) => !isVideo(u)).forEach((u) => { const im = new Image(); im.src = u; });   // warm the cache
     spawnGif();
   }
 
@@ -510,9 +552,7 @@
     const spot = findSpot(size, nextSide);
     if (!spot) return;                       // no room that keeps the timer readable; try again next tick
     nextSide = nextSide === 'left' ? 'right' : 'left';   // alternate sides of the screen
-    const img = document.createElement('img');
-    img.src = url;
-    img.width = size;
+    const img = mediaEl(url);
     img.style.width = size + 'px';
     img.style.maxHeight = size + 'px';
     img.style.left = spot.x + 'px';
@@ -587,7 +627,7 @@
     }
     urls.forEach((url, i) => {
       const li = document.createElement('li');
-      const img = document.createElement('img'); img.src = url; img.alt = '';
+      const img = mediaEl(url);
       const span = document.createElement('span'); span.className = 'url'; span.textContent = url; span.title = url;
       const rm = document.createElement('button'); rm.className = 'remove'; rm.textContent = '×'; rm.title = 'Remove';
       rm.addEventListener('click', () => { settings[kind].splice(i, 1); saveSettings(); renderLists(); });
