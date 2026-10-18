@@ -25,7 +25,17 @@
     --hover: var(--teal);
     --danger: #e08a7f;
   }
-  body[data-phase="relax"] { --accent: var(--sky); --accent-text: var(--sky); --on-accent: var(--plum); }
+  /* Relax: a different combination — deep teal background, pale yellow text, light blue accent */
+  body[data-phase="relax"] {
+    --bg: #0f5253;                      /* darkened palette teal */
+    --panel: #0b4344;
+    --border: rgba(237,232,176,.22);    /* cream at 22% */
+    --muted: rgba(237,232,176,.65);
+    --accent: var(--sky);
+    --accent-text: var(--sky);
+    --on-accent: #0f5253;
+    --hover: var(--mint);
+  }
 
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
@@ -115,7 +125,7 @@
     position: fixed; top: 0; right: 0; bottom: 0; z-index: 6;
     width: min(420px, 100vw);
     background: var(--panel); border-left: 1px solid var(--border);
-    transform: translateX(100%); transition: transform .25s ease;
+    transform: translateX(100%); transition: transform .25s ease, background .6s;
     overflow-y: auto; padding: 1.25rem 1.25rem 2rem;
     font-size: .9rem;
   }
