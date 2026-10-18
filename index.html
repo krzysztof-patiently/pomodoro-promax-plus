@@ -170,6 +170,13 @@
   #saveStatus.flash { color: var(--sky); transition: none; }
   #saveStatus { transition: color 1.2s ease; }
 
+  #skipDialog {
+    border: 1px solid var(--border); border-radius: 16px; background: var(--panel); color: var(--fg);
+    padding: 1.5rem 1.75rem; max-width: 22rem; font: inherit;
+  }
+  #skipDialog::backdrop { background: rgba(0,0,0,.45); }
+  #skipDialog p { margin: 0 0 1.25rem; font-size: 1rem; }
+  .dialog-actions { display: flex; gap: .75rem; justify-content: flex-end; }
   #scrim { position: fixed; inset: 0; z-index: 4; background: rgba(0,0,0,.35); display: none; }
   #scrim.open { display: block; }
 </style>
@@ -191,6 +198,7 @@
 
   <div class="controls">
     <button id="startBtn" class="primary">Start</button>
+    <button id="skipBtn" title="End this period now and start the next one">Skip</button>
     <button id="resetBtn">Reset</button>
   </div>
 </main>
@@ -201,6 +209,14 @@
     <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>
   </svg>
 </button>
+
+<dialog id="skipDialog">
+  <p id="skipText">Skip the rest of this focus period?</p>
+  <div class="dialog-actions">
+    <button type="button" id="skipCancel">Cancel</button>
+    <button type="button" id="skipConfirm" class="primary">Yes, skip</button>
+  </div>
+</dialog>
 
 <div id="scrim"></div>
 <aside id="settings" aria-label="Settings">
@@ -347,7 +363,8 @@
   const $ = (id) => document.getElementById(id);
   const clockEl = $('clock'), phaseEl = $('phase'), cyclesEl = $('cycles');
   const focusMinEl = $('focusMin'), relaxMinEl = $('relaxMin'), cyclesInputEl = $('cyclesInput');
-  const startBtn = $('startBtn'), resetBtn = $('resetBtn');
+  const startBtn = $('startBtn'), resetBtn = $('resetBtn'), skipBtn = $('skipBtn');
+  const skipDialog = $('skipDialog');
   const gifLayer = $('gifs');
   const settingsEl = $('settings'), scrim = $('scrim');
 
@@ -365,6 +382,7 @@
   let completedFocus = 0;
   let finished = false;         // reached the configured number of cycles
   let tickHandle = null;
+  let endHandle = null;         // fires right at the end of the period, even when the tab is in the background
   const elapsed = { focus: 0, relax: 0 };   // ms actually spent running in each phase
   let lastTick = null;                      // timestamp of the last accounting tick
 
@@ -403,6 +421,7 @@
     document.body.dataset.phase = phase;
     startBtn.textContent = finished ? 'Done' : running ? 'Pause' : (endAt === null && remainingMs === minutesOf(phase) * 60_000 ? 'Start' : 'Resume');
     startBtn.disabled = finished;
+    skipBtn.disabled = finished;
     const total = elapsed.focus + elapsed.relax;
     cyclesEl.textContent = (completedFocus || total > 0)
       ? `${completedFocus} focus ${completedFocus === 1 ? 'session' : 'sessions'} done ` +
@@ -420,12 +439,18 @@
   function start() {
     if (running || finished) return;
     ensureAudio();
+    primeChimes();
     running = true;
     endAt = Date.now() + remainingMs;
     lastTick = Date.now();
     tickHandle = setInterval(tick, 200);
+    armEndTimer();
     startGifs();
     render();
+  }
+  function armEndTimer() {
+    clearTimeout(endHandle);
+    endHandle = setTimeout(tick, Math.max(0, endAt - Date.now()) + 20);
   }
 
   function pause() {
@@ -434,6 +459,7 @@
     running = false;
     remainingMs = Math.max(0, endAt - Date.now());
     clearInterval(tickHandle); tickHandle = null;
+    clearTimeout(endHandle); endHandle = null;
     stopGifs();
     render();
   }
@@ -441,6 +467,7 @@
   function reset() {
     running = false;
     clearInterval(tickHandle); tickHandle = null;
+    clearTimeout(endHandle); endHandle = null;
     phase = 'focus';
     endAt = null;
     remainingMs = minutesOf('focus') * 60_000;
@@ -451,8 +478,8 @@
     render();
   }
 
-  function endPeriod() {
-    chime(phase);                       // sound for the period that just ended
+  function endPeriod({ silent = false } = {}) {
+    if (!silent) chime(phase);          // sound for the period that just ended
     if (phase === 'focus') completedFocus++;
     const target = cyclesTarget();
     if (phase === 'focus' && target && completedFocus >= target) { finish(); return; }
@@ -460,6 +487,7 @@
     remainingMs = minutesOf(phase) * 60_000;
     endAt = Date.now() + remainingMs;
     lastTick = Date.now();
+    armEndTimer();
     stopGifs(true);
     startGifs();
     render();
@@ -469,6 +497,7 @@
   function finish() {
     running = false; finished = true;
     clearInterval(tickHandle); tickHandle = null;
+    clearTimeout(endHandle); endHandle = null;
     phase = 'relax';
     endAt = null; remainingMs = 0;
     stopGifs(true);
@@ -476,10 +505,31 @@
     render();
   }
 
+  // Skip: end the current period now (no chime) and start the next one immediately.
+  function skip() {
+    if (finished) return;
+    ensureAudio();
+    primeChimes();
+    accountTime();
+    if (!running) {                     // paused or not started yet: the next period runs right away
+      running = true;
+      endAt = Date.now();
+      tickHandle = setInterval(tick, 200);
+    }
+    endPeriod({ silent: true });
+  }
+  skipBtn.addEventListener('click', () => {
+    if (finished) return;
+    $('skipText').textContent = `Skip the rest of this ${phase} period?`;
+    skipDialog.showModal();
+  });
+  $('skipCancel').addEventListener('click', () => skipDialog.close());
+  $('skipConfirm').addEventListener('click', () => { skipDialog.close(); skip(); });
+
   startBtn.addEventListener('click', () => running ? pause() : start());
   resetBtn.addEventListener('click', reset);
   document.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' && !/INPUT|TEXTAREA|BUTTON/.test(e.target.tagName) && !settingsEl.classList.contains('open')) {
+    if (e.code === 'Space' && !/INPUT|TEXTAREA|BUTTON/.test(e.target.tagName) && !settingsEl.classList.contains('open') && !skipDialog.open) {
       e.preventDefault(); running ? pause() : start();
     }
     if (e.key === 'Escape') closeSettings();
@@ -506,15 +556,39 @@
       if (audioCtx.state === 'suspended') audioCtx.resume();
     } catch {}
   }
+  // One reusable player per chime URL. Browsers only let a media element start playing on its own
+  // after it has been "unlocked" inside a user gesture, so Start primes both players (see primeChimes).
+  const players = new Map();   // url -> HTMLAudioElement
+  function playerFor(url) {
+    let a = players.get(url);
+    if (!a) { a = new Audio(url); a.preload = 'auto'; players.set(url, a); }
+    return a;
+  }
+  // Called from a click: load both chimes and play each silently for an instant so later
+  // unattended play() calls are allowed.
+  function primeChimes() {
+    for (const kind of ['focus', 'relax']) {
+      const url = settings[kind + 'ChimeUrl'];
+      if (!url) continue;
+      const a = playerFor(url);
+      if (a.dataset.primed) continue;
+      a.muted = true;
+      const p = a.play();
+      if (p && p.then) {
+        p.then(() => { a.pause(); a.currentTime = 0; a.muted = false; a.dataset.primed = '1'; })
+         .catch(() => { a.muted = false; });
+      }
+    }
+  }
   function chime(endedPhase = phase) {
     const url = settings[endedPhase + 'ChimeUrl'];
-    if (url) {
-      const a = new Audio(url);
-      a.volume = 0.7;
-      a.play().catch(builtinChime);
-      return;
-    }
-    builtinChime();
+    if (!url) { builtinChime(); return; }
+    const a = playerFor(url);
+    a.muted = false;
+    a.volume = 0.7;
+    try { a.currentTime = 0; } catch {}
+    const p = a.play();
+    if (p && p.catch) p.catch(builtinChime);
   }
   function builtinChime() {
     ensureAudio();
